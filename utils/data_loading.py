@@ -11,7 +11,7 @@ from os.path import splitext, isfile, join
 from pathlib import Path
 from torch.utils.data import Dataset
 from tqdm import tqdm
-
+from torchvision.transforms.functional import to_tensor
 
 def load_image(filename):
     ext = splitext(filename)[1]
@@ -47,6 +47,9 @@ class BasicDataset(Dataset):
         if not self.ids:
             raise RuntimeError(f'No input file found in {images_dir}, make sure you put your images there')
 
+        self._create_mask_values()
+
+    def _create_mask_values(self):
         logging.info(f'Creating dataset with {len(self.ids)} examples')
         logging.info('Scanning mask files to determine unique values')
         with Pool() as p:
@@ -107,11 +110,29 @@ class BasicDataset(Dataset):
         mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
 
         return {
-            'image': torch.as_tensor(img.copy()).float().contiguous(),
-            'mask': torch.as_tensor(mask.copy()).long().contiguous()
+            'image': torch.as_tensor(img).float().contiguous(),
+            'mask': torch.as_tensor(mask).long().contiguous()
         }
 
 
 class CarvanaDataset(BasicDataset):
     def __init__(self, images_dir, mask_dir, scale=1):
         super().__init__(images_dir, mask_dir, scale, mask_suffix='_mask')
+
+
+class HalfDataset(BasicDataset):
+    def __init__(self, root_dir: str):
+        root_dir = Path(root_dir)
+        super().__init__(root_dir / 'imgs', root_dir / 'masks')
+
+    @staticmethod
+    def preprocess(mask_values, pil_img, scale, is_mask):
+        return to_tensor(pil_img)
+
+    def _create_mask_values(self):
+        self.mask_values = None
+
+if __name__ == '__main__':
+    for item in HalfDataset('pdata/train'):
+        print(item['mask'].shape)
+        break

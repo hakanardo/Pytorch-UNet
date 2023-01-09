@@ -15,8 +15,8 @@ from tqdm import tqdm
 
 import wandb
 from evaluate import evaluate
-from unet import UNet
-from utils.data_loading import BasicDataset, CarvanaDataset
+from unet import UNet, UNet4k
+from utils.data_loading import BasicDataset, CarvanaDataset, HalfDataset
 from utils.dice_score import dice_loss
 
 dir_img = Path('./data/imgs/')
@@ -39,15 +39,19 @@ def train_model(
         gradient_clipping: float = 1.0,
 ):
     # 1. Create dataset
-    try:
-        dataset = CarvanaDataset(dir_img, dir_mask, img_scale)
-    except (AssertionError, RuntimeError, IndexError):
-        dataset = BasicDataset(dir_img, dir_mask, img_scale)
+    # try:
+    #     dataset = CarvanaDataset(dir_img, dir_mask, img_scale)
+    # except (AssertionError, RuntimeError, IndexError):
+    #     dataset = BasicDataset(dir_img, dir_mask, img_scale)
 
     # 2. Split into train / validation partitions
-    n_val = int(len(dataset) * val_percent)
-    n_train = len(dataset) - n_val
-    train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
+    # n_val = int(len(dataset) * val_percent)
+    # n_train = len(dataset) - n_val
+    # train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
+
+    train_set = HalfDataset('pdata/train')
+    val_set = HalfDataset('pdata/eval')
+
 
     # 3. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
@@ -193,13 +197,15 @@ if __name__ == '__main__':
     # Change here to adapt to your data
     # n_channels=3 for RGB images
     # n_classes is the number of probabilities you want to get per pixel
-    model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+
+    # model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
+    model = UNet4k(3, 3)
     model = model.to(memory_format=torch.channels_last)
 
-    logging.info(f'Network:\n'
-                 f'\t{model.n_channels} input channels\n'
-                 f'\t{model.n_classes} output channels (classes)\n'
-                 f'\t{"Bilinear" if model.bilinear else "Transposed conv"} upscaling')
+    # logging.info(f'Network:\n'
+    #              f'\t{model.n_channels} input channels\n'
+    #              f'\t{model.n_classes} output channels (classes)\n'
+    #              f'\t{"Bilinear" if model.bilinear else "Transposed conv"} upscaling')
 
     if args.load:
         state_dict = torch.load(args.load, map_location=device)
