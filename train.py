@@ -18,6 +18,7 @@ from evaluate import evaluate
 from unet import UNet, UNet4k
 from utils.data_loading import BasicDataset, CarvanaDataset, HalfDataset
 from utils.dice_score import dice_loss
+from torch.utils.checkpoint import checkpoint
 
 dir_img = Path('./data/imgs/')
 dir_mask = Path('./data/masks/')
@@ -69,8 +70,8 @@ def train_model(
         Epochs:          {epochs}
         Batch size:      {batch_size}
         Learning rate:   {learning_rate}
-        Training size:   {n_train}
-        Validation size: {n_val}
+        Training size:   {len(train_set)}
+        Validation size: {len(val_set)}
         Checkpoints:     {save_checkpoint}
         Device:          {device.type}
         Images scaling:  {img_scale}
@@ -89,7 +90,7 @@ def train_model(
     for epoch in range(1, epochs + 1):
         model.train()
         epoch_loss = 0
-        with tqdm(total=n_train, desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
+        with tqdm(total=len(train_set), desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
                 images, true_masks = batch['image'], batch['mask']
 
@@ -102,6 +103,7 @@ def train_model(
                 true_masks = true_masks.to(device=device, dtype=torch.long)
 
                 with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
+                    # masks_pred = checkpoint(model, images)
                     masks_pred = model(images)
                     if model.n_classes == 1:
                         loss = criterion(masks_pred.squeeze(1), true_masks.float())
@@ -131,7 +133,7 @@ def train_model(
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
 
                 # Evaluation round
-                division_step = (n_train // (5 * batch_size))
+                division_step = (len(train_set) // (2 * batch_size))
                 if division_step > 0:
                     if global_step % division_step == 0:
                         histograms = {}
@@ -165,14 +167,14 @@ def train_model(
         if save_checkpoint:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
             state_dict = model.state_dict()
-            state_dict['mask_values'] = dataset.mask_values
+            # state_dict['mask_values'] = dataset.mask_values
             torch.save(state_dict, str(dir_checkpoint / 'checkpoint_epoch{}.pth'.format(epoch)))
             logging.info(f'Checkpoint {epoch} saved!')
 
 
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
-    parser.add_argument('--epochs', '-e', metavar='E', type=int, default=5, help='Number of epochs')
+    parser.add_argument('--epochs', '-e', metavar='E', type=int, default=50, help='Number of epochs')
     parser.add_argument('--batch-size', '-b', dest='batch_size', metavar='B', type=int, default=1, help='Batch size')
     parser.add_argument('--learning-rate', '-l', metavar='LR', type=float, default=1e-5,
                         help='Learning rate', dest='lr')
@@ -180,7 +182,7 @@ def get_args():
     parser.add_argument('--scale', '-s', type=float, default=0.5, help='Downscaling factor of the images')
     parser.add_argument('--validation', '-v', dest='val', type=float, default=10.0,
                         help='Percent of the data that is used as validation (0-100)')
-    parser.add_argument('--amp', action='store_true', default=False, help='Use mixed precision')
+    parser.add_argument('--amp', action='store_true', default=True, help='Use mixed precision')
     parser.add_argument('--bilinear', action='store_true', default=False, help='Use bilinear upsampling')
     parser.add_argument('--classes', '-c', type=int, default=2, help='Number of classes')
 
@@ -189,6 +191,7 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
+    print(args.amp)
 
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

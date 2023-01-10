@@ -109,6 +109,9 @@ class BasicDataset(Dataset):
         img = self.preprocess(self.mask_values, img, self.scale, is_mask=False)
         mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
 
+        # img = img[:, :, :2048]
+        # mask = mask[:, :, :2048]
+
         return {
             'image': torch.as_tensor(img).float().contiguous(),
             'mask': torch.as_tensor(mask).long().contiguous()
@@ -127,7 +130,11 @@ class HalfDataset(BasicDataset):
 
     @staticmethod
     def preprocess(mask_values, pil_img, scale, is_mask):
-        return to_tensor(pil_img)
+        tensor = to_tensor(pil_img)
+        if is_mask:
+            assert tensor.shape[0] == 1
+            tensor = tensor[0]
+        return tensor
 
     def _create_mask_values(self):
         self.mask_values = None
