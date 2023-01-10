@@ -16,7 +16,7 @@ from tqdm import tqdm
 import wandb
 from evaluate import evaluate
 from unet import UNet, UNet4k
-from utils.data_loading import BasicDataset, CarvanaDataset, HalfDataset
+from utils.data_loading import BasicDataset, CarvanaDataset, HalfDataset, HFlipDataset
 from utils.dice_score import dice_loss
 from torch.utils.checkpoint import checkpoint
 
@@ -50,8 +50,8 @@ def train_model(
     # n_train = len(dataset) - n_val
     # train_set, val_set = random_split(dataset, [n_train, n_val], generator=torch.Generator().manual_seed(0))
 
-    train_set = HalfDataset('pdata/train')
-    val_set = HalfDataset('pdata/eval')
+    train_set = HFlipDataset(HalfDataset('pdata/train'))
+    val_set = HFlipDataset(HalfDataset('pdata/eval'))
 
 
     # 3. Create data loaders
@@ -141,7 +141,7 @@ def train_model(
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
 
                 # Evaluation round
-                division_step = (len(train_set) // (2 * batch_size))
+                division_step = (len(train_set) // (batch_size))
                 if division_step > 0:
                     if global_step % division_step == 0:
                         histograms = {}
@@ -199,7 +199,6 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
-    print(args.amp)
 
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

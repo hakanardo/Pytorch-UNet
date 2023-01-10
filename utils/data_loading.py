@@ -106,9 +106,8 @@ class BasicDataset(Dataset):
         assert img.size == mask.size, \
             f'Image and mask {name} should be the same size, but are {img.size} and {mask.size}'
 
-        do_flip = (torch.rand(1) < 0.5)
-        img = self.preprocess(self.mask_values, img, self.scale, is_mask=False, flip=do_flip)
-        mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True, flip=do_flip)
+        img = self.preprocess(self.mask_values, img, self.scale, is_mask=False)
+        mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
 
         # img = img[:, :1024]
         # mask = mask[:1024]
@@ -130,25 +129,36 @@ class HalfDataset(BasicDataset):
         super().__init__(root_dir / 'imgs', root_dir / 'masks')
 
     @staticmethod
-    def preprocess(mask_values, pil_img, scale, is_mask, flip=False):
+    def preprocess(mask_values, pil_img, scale, is_mask):
         if is_mask:
             tensor = torch.tensor(np.array(pil_img)).to(int)
         else:
             tensor = to_tensor(pil_img)
-
-        if flip:
-            if is_mask:
-                remap = torch.tensor([0, 2, 1])
-                tensor = remap[hflip(tensor)]
-            else:
-                tensor = hflip(tensor)
-
         return tensor
 
     def _create_mask_values(self):
         self.mask_values = None
 
+class HFlipDataset(Dataset):
+    def __init__(self, parent) -> None:
+        self.parent = parent
+
+    def __len__(self):
+        return 2 * len(self.parent)
+
+    def __getitem__(self, index):
+        item = self.parent[index // 2]
+        if index & 1:
+            remap = torch.tensor([0, 2, 1])
+            item['mask'] = remap[hflip(item['mask'])]
+            item['image'] = hflip(item['image'])
+        return item
+
+
 if __name__ == '__main__':
-    for item in HalfDataset('pdata/train'):
-        print(item['mask'].shape)
-        break
+    from vi3o import view, flipp
+    flipp()
+    for item in HFlipDataset(HalfDataset('pdata/train')):
+        view(255 * item['image'].numpy().transpose(1, 2, 0))
+        view(127 * item['mask'].numpy())
+        flipp(pause=True)
