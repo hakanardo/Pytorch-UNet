@@ -106,8 +106,9 @@ class BasicDataset(Dataset):
         assert img.size == mask.size, \
             f'Image and mask {name} should be the same size, but are {img.size} and {mask.size}'
 
-        img = self.preprocess(self.mask_values, img, self.scale, is_mask=False)
-        mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
+        do_flip = (torch.rand(1) < 0.5)
+        img = self.preprocess(self.mask_values, img, self.scale, is_mask=False, flip=do_flip)
+        mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True, flip=do_flip)
 
         # img = img[:, :1024]
         # mask = mask[:1024]
@@ -129,13 +130,13 @@ class HalfDataset(BasicDataset):
         super().__init__(root_dir / 'imgs', root_dir / 'masks')
 
     @staticmethod
-    def preprocess(mask_values, pil_img, scale, is_mask):
+    def preprocess(mask_values, pil_img, scale, is_mask, flip=False):
         if is_mask:
             tensor = torch.tensor(np.array(pil_img)).to(int)
         else:
             tensor = to_tensor(pil_img)
 
-        if torch.rand(1) < 0.5:
+        if flip:
             if is_mask:
                 remap = torch.tensor([0, 2, 1])
                 tensor = remap[hflip(tensor)]
