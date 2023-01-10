@@ -11,7 +11,7 @@ from os.path import splitext, isfile, join
 from pathlib import Path
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from torchvision.transforms.functional import to_tensor
+from torchvision.transforms.functional import to_tensor, hflip
 
 def load_image(filename):
     ext = splitext(filename)[1]
@@ -109,8 +109,8 @@ class BasicDataset(Dataset):
         img = self.preprocess(self.mask_values, img, self.scale, is_mask=False)
         mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
 
-        # img = img[:, :, :2048]
-        # mask = mask[:, :, :2048]
+        # img = img[:, :1024]
+        # mask = mask[:1024]
 
         return {
             'image': torch.as_tensor(img).float().contiguous(),
@@ -130,10 +130,18 @@ class HalfDataset(BasicDataset):
 
     @staticmethod
     def preprocess(mask_values, pil_img, scale, is_mask):
-        tensor = to_tensor(pil_img)
         if is_mask:
-            assert tensor.shape[0] == 1
-            tensor = tensor[0]
+            tensor = torch.tensor(np.array(pil_img)).to(int)
+        else:
+            tensor = to_tensor(pil_img)
+
+        if torch.rand(1) < 0.5:
+            if is_mask:
+                remap = torch.tensor([0, 2, 1])
+                tensor = remap[hflip(tensor)]
+            else:
+                tensor = hflip(tensor)
+
         return tensor
 
     def _create_mask_values(self):

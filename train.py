@@ -56,6 +56,7 @@ def train_model(
 
     # 3. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
+    # loader_args = dict(batch_size=batch_size, num_workers=0, pin_memory=True)
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
 
@@ -115,6 +116,13 @@ def train_model(
                             F.one_hot(true_masks, model.n_classes).permute(0, 3, 1, 2).float(),
                             multiclass=True
                         )
+
+                # if global_step % 10 == 0:
+                #     from vi3o import view, flipp
+                #     view(255 * images[0].detach().cpu().numpy().transpose(1, 2, 0))
+                #     view(127 * true_masks[0].detach().cpu().numpy())
+                #     view(127 * masks_pred[0].detach().cpu().numpy().argmax(0))
+                #     flipp()
 
                 optimizer.zero_grad(set_to_none=True)
                 grad_scaler.scale(loss).backward()
