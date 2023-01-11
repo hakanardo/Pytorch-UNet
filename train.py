@@ -25,7 +25,7 @@ dir_mask = Path('./data/masks/')
 dir_checkpoint = Path('./checkpoints/')
 
 def mse_loss_pos_weight(pred, gt):
-    weights = (gt > 1e-3).float() * 10 + 1
+    weights = (gt > 1e-3).float() * 100 + 1
     loss = (pred - gt) ** 2 * weights
     return loss.mean()
 
@@ -111,6 +111,7 @@ def train_model(
                 with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
                     # masks_pred = checkpoint(model, images)
                     masks_pred, endpoints_pred = model(images)
+
                     if model.n_classes == 1:
                         loss = criterion(masks_pred.squeeze(1), true_masks.float())
                         loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
@@ -123,8 +124,9 @@ def train_model(
                         )
 
                     endpoints_pred = torch.sigmoid_(endpoints_pred)
-                    endpoint_loss = mse_loss_pos_weight(true_endpoints, endpoints_pred)
-                    loss += endpoint_loss
+                    endpoint_loss = mse_loss_pos_weight(endpoints_pred, true_endpoints) #* 100
+                    loss /= 100
+                    loss = endpoint_loss
 
                 # if global_step % 10 == 0:
                 #     from vi3o import view, flipp
@@ -138,6 +140,13 @@ def train_model(
                 torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clipping)
                 grad_scaler.step(optimizer)
                 grad_scaler.update()
+
+                # print(loss)
+                # from vi3o import view, flipp
+                # view(255*images[0,0].detach().cpu().numpy())
+                # view(255*endpoints_pred[0,0].detach().cpu().numpy())
+                # flipp()
+                # continue
 
                 pbar.update(images.shape[0])
                 global_step += 1
@@ -157,31 +166,34 @@ def train_model(
                         histograms = {}
                         for tag, value in model.named_parameters():
                             tag = tag.replace('/', '.')
-                            if not torch.isinf(value).any():
-                                histograms['Weights/' + tag] = wandb.Histogram(value.data.cpu())
-                            if not torch.isinf(value.grad).any():
-                                histograms['Gradients/' + tag] = wandb.Histogram(value.grad.data.cpu())
+                            # if not torch.isinf(value).any():
+                            #     histograms['Weights/' + tag] = wandb.Histogram(value.data.cpu())
+                            # if not torch.isinf(value.grad).any():
+                            #     histograms['Gradients/' + tag] = wandb.Histogram(value.grad.data.cpu())
 
-                        val_score = evaluate(model, val_loader, device, amp)
+                        val_score = evaluate(model, val_loader, device, amp, experiment)
                         scheduler.step(val_score)
 
                         logging.info('Validation Dice score: {}'.format(val_score))
-                        try:
-                            experiment.log({
-                                'learning rate': optimizer.param_groups[0]['lr'],
-                                'validation Dice': val_score,
-                                'images': wandb.Image(images[0].cpu()),
-                                'endpoints': wandb.Image(endpoints_pred[0].cpu()),
-                                'masks': {
-                                    'true': wandb.Image(true_masks[0].float().cpu()),
-                                    'pred': wandb.Image(masks_pred.argmax(dim=1)[0].float().cpu()),
-                                },
-                                'step': global_step,
-                                'epoch': epoch,
-                                **histograms
-                            })
-                        except:
-                            pass
+                        # try:
+                        experiment.log({
+                            'learning rate': optimizer.param_groups[0]['lr'],
+                            'validation Dice': val_score,
+                            'images': wandb.Image(images[0].cpu()),
+                            'endpoints': {
+                                'true': wandb.Image(true_endpoints[0].float().cpu()),
+                                'pred': wandb.Image(endpoints_pred[0].float().cpu()),
+                            },
+                            'masks': {
+                                'true': wandb.Image(true_masks[0].float().cpu()),
+                                'pred': wandb.Image(masks_pred.argmax(dim=1)[0].float().cpu()),
+                            },
+                            'step': global_step,
+                            'epoch': epoch,
+                            **histograms
+                        })
+                        # except:
+                        #     pass
 
         if save_checkpoint:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
@@ -220,7 +232,7 @@ if __name__ == '__main__':
     # n_classes is the number of probabilities you want to get per pixel
 
     # model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
-    model = UNet4k(3, 3, 3)
+    model = UNet4k(3, 3, 1)
     model = model.to(memory_format=torch.channels_last)
 
     # logging.info(f'Network:\n'

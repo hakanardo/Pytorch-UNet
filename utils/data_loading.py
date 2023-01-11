@@ -145,6 +145,7 @@ class HalfDataset(BasicDataset):
             fn = img_file[0].parent.parent / 'endpoints' / img_file[0].name.replace('.jpg', f'_{n}.png')
             heatmaps.append(self.preprocess(self.mask_values, load_image(fn), self.scale, is_mask=False)[0])
         heatmaps = torch.stack(heatmaps)
+        heatmaps = heatmaps.sum(0, keepdim=True)
 
 
         return {
@@ -156,7 +157,7 @@ class HalfDataset(BasicDataset):
 
     @staticmethod
     def preprocess(mask_values, pil_img, scale, is_mask):
-        pil_img = pil_img.resize((256, 256), resample=Image.NEAREST)
+        # pil_img = pil_img.resize((256, 256), resample=Image.NEAREST)
         if is_mask:
             tensor = torch.tensor(np.array(pil_img)).to(int)
         else:
@@ -179,10 +180,14 @@ class HFlipDataset(Dataset):
             remap = torch.tensor([0, 2, 1])
             item['mask'] = remap[hflip(item['mask'])]
             item['image'] = hflip(item['image'])
-            flipped = hflip(item['endpoints'])
-            item['endpoints'][0] = flipped[2]
-            item['endpoints'][1] = flipped[1]
-            item['endpoints'][2] = flipped[0]
+            if False:
+                flipped = hflip(item['endpoints'])
+                item['endpoints'][0] = flipped[2]
+                item['endpoints'][1] = flipped[1]
+                item['endpoints'][2] = flipped[0]
+            else:
+                item['endpoints'] = hflip(item['endpoints'])
+
         return item
 
 
