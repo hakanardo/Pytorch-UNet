@@ -80,7 +80,7 @@ class UNet(nn.Module):
 
 
 class UNet4k(nn.Module):
-    def __init__(self, n_channels, n_classes):
+    def __init__(self, n_channels, n_classes, n_point_types):
         super().__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
@@ -100,7 +100,8 @@ class UNet4k(nn.Module):
         self.up5 = (UpAlt(128, 64))
         self.up6 = (UpAlt(64, 32))
         self.up7 = (UpAlt(32, 16))
-        self.outc = (OutConv(16, n_classes))
+        self.outc1 = (OutConv(16, n_classes))
+        self.outc2 = (OutConv(16, n_point_types))
 
     def forward(self, x):
         x1 = self.inc(x)
@@ -118,5 +119,5 @@ class UNet4k(nn.Module):
         x = self.up5(x, x3)
         x = self.up6(x, x2)
         x = self.up7(x, x1)
-        logits = self.outc(x)
+        logits = (self.outc1(x), self.outc2(x))
         return logits

@@ -109,9 +109,6 @@ class BasicDataset(Dataset):
         img = self.preprocess(self.mask_values, img, self.scale, is_mask=False)
         mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
 
-        # img = img[:, :1024]
-        # mask = mask[:1024]
-
         return {
             'image': torch.as_tensor(img).float().contiguous(),
             'mask': torch.as_tensor(mask).long().contiguous()
@@ -128,8 +125,38 @@ class HalfDataset(BasicDataset):
         root_dir = Path(root_dir)
         super().__init__(root_dir / 'imgs', root_dir / 'masks')
 
+    def __getitem__(self, idx):
+        name = self.ids[idx]
+        mask_file = list(self.mask_dir.glob(name + self.mask_suffix + '.*'))
+        img_file = list(self.images_dir.glob(name + '.*'))
+
+        assert len(img_file) == 1, f'Either no image or multiple images found for the ID {name}: {img_file}'
+        assert len(mask_file) == 1, f'Either no mask or multiple masks found for the ID {name}: {mask_file}'
+        mask = load_image(mask_file[0])
+        img = load_image(img_file[0])
+
+        assert img.size == mask.size, \
+            f'Image and mask {name} should be the same size, but are {img.size} and {mask.size}'
+
+        img = self.preprocess(self.mask_values, img, self.scale, is_mask=False)
+        mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
+        heatmaps = []
+        for n in ['left', 'middle', 'right']:
+            fn = img_file[0].parent.parent / 'endpoints' / img_file[0].name.replace('.jpg', f'_{n}.png')
+            heatmaps.append(self.preprocess(self.mask_values, load_image(fn), self.scale, is_mask=False)[0])
+        heatmaps = torch.stack(heatmaps)
+
+
+        return {
+            'image': torch.as_tensor(img).float().contiguous(),
+            'mask': torch.as_tensor(mask).long().contiguous(),
+            'endpoints': torch.as_tensor(heatmaps).float().contiguous(),
+        }
+
+
     @staticmethod
     def preprocess(mask_values, pil_img, scale, is_mask):
+        pil_img = pil_img.resize((256, 256), resample=Image.NEAREST)
         if is_mask:
             tensor = torch.tensor(np.array(pil_img)).to(int)
         else:
@@ -152,6 +179,10 @@ class HFlipDataset(Dataset):
             remap = torch.tensor([0, 2, 1])
             item['mask'] = remap[hflip(item['mask'])]
             item['image'] = hflip(item['image'])
+            flipped = hflip(item['endpoints'])
+            item['endpoints'][0] = flipped[2]
+            item['endpoints'][1] = flipped[1]
+            item['endpoints'][2] = flipped[0]
         return item
 
 
@@ -161,4 +192,5 @@ if __name__ == '__main__':
     for item in HFlipDataset(HalfDataset('pdata/train')):
         view(255 * item['image'].numpy().transpose(1, 2, 0))
         view(127 * item['mask'].numpy())
+        view(255 * item['endpoints'].numpy().transpose(1, 2, 0))
         flipp(pause=True)

@@ -24,6 +24,10 @@ dir_img = Path('./data/imgs/')
 dir_mask = Path('./data/masks/')
 dir_checkpoint = Path('./checkpoints/')
 
+def mse_loss_pos_weight(pred, gt):
+    weights = (gt > 1e-3).float() * 10 + 1
+    loss = (pred - gt) ** 2 * weights
+    return loss.mean()
 
 def train_model(
         model,
@@ -93,7 +97,7 @@ def train_model(
         epoch_loss = 0
         with tqdm(total=len(train_set), desc=f'Epoch {epoch}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
-                images, true_masks = batch['image'], batch['mask']
+                images, true_masks, true_endpoints = batch['image'], batch['mask'], batch['endpoints']
 
                 assert images.shape[1] == model.n_channels, \
                     f'Network has been defined with {model.n_channels} input channels, ' \
@@ -102,10 +106,11 @@ def train_model(
 
                 images = images.to(device=device, dtype=torch.float32, memory_format=torch.channels_last)
                 true_masks = true_masks.to(device=device, dtype=torch.long)
+                true_endpoints = true_endpoints.to(device=device, dtype=torch.float32)
 
                 with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
                     # masks_pred = checkpoint(model, images)
-                    masks_pred = model(images)
+                    masks_pred, endpoints_pred = model(images)
                     if model.n_classes == 1:
                         loss = criterion(masks_pred.squeeze(1), true_masks.float())
                         loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
@@ -116,6 +121,10 @@ def train_model(
                             F.one_hot(true_masks, model.n_classes).permute(0, 3, 1, 2).float(),
                             multiclass=True
                         )
+
+                    endpoints_pred = torch.sigmoid_(endpoints_pred)
+                    endpoint_loss = mse_loss_pos_weight(true_endpoints, endpoints_pred)
+                    loss += endpoint_loss
 
                 # if global_step % 10 == 0:
                 #     from vi3o import view, flipp
@@ -135,10 +144,11 @@ def train_model(
                 epoch_loss += loss.item()
                 experiment.log({
                     'train loss': loss.item(),
+                    'train endpoint_loss': endpoint_loss.item(),
                     'step': global_step,
                     'epoch': epoch
                 })
-                pbar.set_postfix(**{'loss (batch)': loss.item()})
+                pbar.set_postfix(**{'loss (batch)': loss.item(), 'endpoint_loss': endpoint_loss.item()})
 
                 # Evaluation round
                 division_step = (len(train_set) // (batch_size))
@@ -161,6 +171,7 @@ def train_model(
                                 'learning rate': optimizer.param_groups[0]['lr'],
                                 'validation Dice': val_score,
                                 'images': wandb.Image(images[0].cpu()),
+                                'endpoints': wandb.Image(endpoints_pred[0].cpu()),
                                 'masks': {
                                     'true': wandb.Image(true_masks[0].float().cpu()),
                                     'pred': wandb.Image(masks_pred.argmax(dim=1)[0].float().cpu()),
@@ -209,7 +220,7 @@ if __name__ == '__main__':
     # n_classes is the number of probabilities you want to get per pixel
 
     # model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
-    model = UNet4k(3, 3)
+    model = UNet4k(3, 3, 3)
     model = model.to(memory_format=torch.channels_last)
 
     # logging.info(f'Network:\n'
@@ -224,30 +235,13 @@ if __name__ == '__main__':
         logging.info(f'Model loaded from {args.load}')
 
     model.to(device=device)
-    try:
-        train_model(
-            model=model,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            learning_rate=args.lr,
-            device=device,
-            img_scale=args.scale,
-            val_percent=args.val / 100,
-            amp=args.amp
-        )
-    except torch.cuda.OutOfMemoryError:
-        logging.error('Detected OutOfMemoryError! '
-                      'Enabling checkpointing to reduce memory usage, but this slows down training. '
-                      'Consider enabling AMP (--amp) for fast and memory efficient training')
-        torch.cuda.empty_cache()
-        model.use_checkpointing()
-        train_model(
-            model=model,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            learning_rate=args.lr,
-            device=device,
-            img_scale=args.scale,
-            val_percent=args.val / 100,
-            amp=args.amp
-        )
+    train_model(
+        model=model,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        learning_rate=args.lr,
+        device=device,
+        img_scale=args.scale,
+        val_percent=args.val / 100,
+        amp=args.amp
+    )
