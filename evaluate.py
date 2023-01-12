@@ -26,7 +26,7 @@ def evaluate(net, dataloader, device, amp, experiment=None):
 
             if net.n_classes == 1:
                 assert mask_true.min() >= 0 and mask_true.max() <= 1, 'True mask indices should be in [0, 1]'
-                mask_pred = (F.sigmoid(mask_pred) > 0.5).float()
+                mask_pred = (F.sigmoid(mask_pred.squeeze(1)) > 0.5).float()
                 # compute the Dice score
                 dice_score += dice_coeff(mask_pred, mask_true, reduce_batch_first=False)
             else:
@@ -46,7 +46,7 @@ def evaluate(net, dataloader, device, amp, experiment=None):
                 },
                 'masks': {
                     'true': wandb.Image(mask_true[0].float().cpu()),
-                    'pred': wandb.Image(mask_pred.argmax(dim=1)[0].float().cpu()),
+                    'pred': wandb.Image(mask_pred.argmax(dim=1)[0].float().cpu() if net.n_classes > 1 else torch.sigmoid(mask_pred[0].float().cpu())),
                 }
             }))
 

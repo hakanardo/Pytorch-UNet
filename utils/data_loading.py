@@ -140,13 +140,16 @@ class HalfDataset(BasicDataset):
 
         img = self.preprocess(self.mask_values, img, self.scale, is_mask=False)
         mask = self.preprocess(self.mask_values, mask, self.scale, is_mask=True)
-        heatmaps = []
-        for n in ['left', 'middle', 'right']:
-            fn = img_file[0].parent.parent / 'endpoints' / img_file[0].name.replace('.jpg', f'_{n}.png')
-            heatmaps.append(self.preprocess(self.mask_values, load_image(fn), self.scale, is_mask=False)[0])
-        heatmaps = torch.stack(heatmaps)
-        heatmaps = heatmaps.sum(0, keepdim=True)
+        mask[mask>0] = 1
 
+        # heatmaps = []
+        # for n in ['left', 'middle', 'right']:
+        #     fn = img_file[0].parent.parent / 'endpoints' / img_file[0].name.replace('.jpg', f'_{n}.png')
+        #     heatmaps.append(self.preprocess(self.mask_values, load_image(fn), self.scale, is_mask=False)[0])
+        # heatmaps = torch.stack(heatmaps)
+        # heatmaps = heatmaps.sum(0, keepdim=True)
+        fn = img_file[0].parent.parent / 'endpoints' / img_file[0].name.replace('.jpg', f'_all.png')
+        heatmaps = self.preprocess(self.mask_values, load_image(fn), self.scale, is_mask=False)
 
         return {
             'image': torch.as_tensor(img).float().contiguous(),
@@ -178,7 +181,8 @@ class HFlipDataset(Dataset):
         item = self.parent[index // 2]
         if index & 1:
             remap = torch.tensor([0, 2, 1])
-            item['mask'] = remap[hflip(item['mask'])]
+            # item['mask'] = remap[hflip(item['mask'])]
+            item['mask'] = hflip(item['mask'])
             item['image'] = hflip(item['image'])
             if False:
                 flipped = hflip(item['endpoints'])
@@ -197,5 +201,5 @@ if __name__ == '__main__':
     for item in HFlipDataset(HalfDataset('pdata/train')):
         view(255 * item['image'].numpy().transpose(1, 2, 0))
         view(127 * item['mask'].numpy())
-        view(255 * item['endpoints'].numpy().transpose(1, 2, 0))
+        view(255 * item['endpoints'].numpy()[0])
         flipp(pause=True)

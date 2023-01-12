@@ -60,7 +60,7 @@ def train_model(
 
     # 3. Create data loaders
     loader_args = dict(batch_size=batch_size, num_workers=os.cpu_count(), pin_memory=True)
-    # loader_args = dict(batch_size=batch_size, num_workers=0, pin_memory=True)
+    # loader_args['num_workers'] = 0
     train_loader = DataLoader(train_set, shuffle=True, **loader_args)
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
 
@@ -186,7 +186,7 @@ def train_model(
                             },
                             'masks': {
                                 'true': wandb.Image(true_masks[0].float().cpu()),
-                                'pred': wandb.Image(masks_pred.argmax(dim=1)[0].float().cpu()),
+                                'pred': wandb.Image(masks_pred.argmax(dim=1)[0].float().cpu() if model.n_classes > 1 else torch.sigmoid(masks_pred[0].float().cpu()))
                             },
                             'step': global_step,
                             'epoch': epoch,
@@ -232,7 +232,7 @@ if __name__ == '__main__':
     # n_classes is the number of probabilities you want to get per pixel
 
     # model = UNet(n_channels=3, n_classes=args.classes, bilinear=args.bilinear)
-    model = UNet4k(3, 3, 1)
+    model = UNet4k(3, 1, 1)
     model = model.to(memory_format=torch.channels_last)
 
     # logging.info(f'Network:\n'
