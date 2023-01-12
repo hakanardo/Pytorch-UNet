@@ -124,9 +124,9 @@ def train_model(
                         )
 
                     endpoints_pred = torch.sigmoid_(endpoints_pred)
-                    endpoint_loss = mse_loss_pos_weight(endpoints_pred, true_endpoints) #* 100
-                    loss /= 100
-                    loss = endpoint_loss
+                    endpoint_loss = mse_loss_pos_weight(endpoints_pred, true_endpoints) * 10
+                    loss /= 10
+                    loss += endpoint_loss
 
                 # if global_step % 10 == 0:
                 #     from vi3o import view, flipp

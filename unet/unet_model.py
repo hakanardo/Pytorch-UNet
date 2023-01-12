@@ -101,7 +101,10 @@ class UNet4k(nn.Module):
         self.up6 = (UpAlt(64, 32))
         self.up7 = (UpAlt(32, 16))
         self.outc1 = (OutConv(16, n_classes))
-        self.outc2 = (OutConv(16, n_point_types))
+        if n_point_types > 0:
+            self.outc2 = (OutConv(16, n_point_types))
+        else:
+            self.outc2 = lambda x: None
 
     def forward(self, x):
         x1 = self.inc(x)

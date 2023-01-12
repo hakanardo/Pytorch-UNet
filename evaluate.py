@@ -52,3 +52,22 @@ def evaluate(net, dataloader, device, amp, experiment=None):
 
     net.train()
     return dice_score / max(num_val_batches, 1)
+
+if __name__ == '__main__':
+    from unet import UNet4k
+    import os
+    from utils.data_loading import HalfDataset, HFlipDataset
+    from torch.utils.data import DataLoader
+
+    device = 'cuda'
+    model = UNet4k(3, 3, 0).to(device)
+    model = model.to(memory_format=torch.channels_last)
+
+    state_dict = torch.load("checkpoints1/checkpoint_epoch14.pth", map_location=device)
+    mask_values = state_dict.pop('mask_values', [0, 1])
+    model.load_state_dict(state_dict)
+
+    loader_args = dict(batch_size=1, num_workers=os.cpu_count(), pin_memory=True)
+    val_set = HFlipDataset(HalfDataset('pdata/eval'))
+    val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
+    evaluate(model, val_loader, device, True)
