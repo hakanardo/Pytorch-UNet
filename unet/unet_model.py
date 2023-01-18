@@ -133,7 +133,7 @@ class UNet4k(nn.Module):
         x = self.up5(x, x3)
         x = self.up6(x, x2)
         x = self.up7(x, x1)
-        logits = (self.outc1(x), self.outc2(x))
+        logits = (self.outc1(x), torch.sigmoid_(self.outc2(x)))
         return logits
 
     def loss(self, predicted, expected):
@@ -150,7 +150,6 @@ class UNet4k(nn.Module):
                 multiclass=True
             )
 
-        endpoints_pred = torch.sigmoid_(endpoints_pred)
         endpoint_loss = mse_loss_pos_weight(endpoints_pred, true_endpoints) * 10
 
         loss = segmentation_loss / 10 + endpoint_loss * 10

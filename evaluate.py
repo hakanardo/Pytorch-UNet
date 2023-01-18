@@ -25,20 +25,19 @@ def evaluate(net, dataloader, device, amp, experiment=None):
 
             # predict the mask
             mask_pred, endpoint_pred = net(image)
-            endpoint_pred = torch.sigmoid_(endpoint_pred)
 
             if net.n_classes == 1:
                 assert mask_true.min() >= 0 and mask_true.max() <= 1, 'True mask indices should be in [0, 1]'
-                mask_pred = (F.sigmoid(mask_pred.squeeze(1)) > 0.5).float()
+                mask_pred_sigmoid = (F.sigmoid(mask_pred.squeeze(1)) > 0.5).float()
                 # compute the Dice score
-                dice_score += dice_coeff(mask_pred, mask_true, reduce_batch_first=False)
+                dice_score += dice_coeff(mask_pred_sigmoid, mask_true, reduce_batch_first=False)
             else:
                 assert mask_true.min() >= 0 and mask_true.max() < net.n_classes, 'True mask indices should be in [0, n_classes['
                 # convert to one-hot format
                 mask_true_onehot = F.one_hot(mask_true, net.n_classes).permute(0, 3, 1, 2).float()
-                mask_pred = F.one_hot(mask_pred.argmax(dim=1), net.n_classes).permute(0, 3, 1, 2).float()
+                mask_pred_onehot = F.one_hot(mask_pred.argmax(dim=1), net.n_classes).permute(0, 3, 1, 2).float()
                 # compute the Dice score, ignoring background
-                dice_score += multiclass_dice_coeff(mask_pred[:, 1:], mask_true_onehot[:, 1:], reduce_batch_first=False)
+                dice_score += multiclass_dice_coeff(mask_pred_onehot[:, 1:], mask_true_onehot[:, 1:], reduce_batch_first=False)
 
             # view(255*(endpoint_pred[0,0].detach().cpu().numpy() > 0.3))
             # view(255*(endpoint_true[0,0].detach().cpu().numpy() > 0.3))
@@ -49,7 +48,16 @@ def evaluate(net, dataloader, device, amp, experiment=None):
                 stats.update(result, expected)
 
             segmentation_loss, endpoint_loss, loss = net.loss((mask_pred, endpoint_pred), (mask_true, endpoint_true))
-            stats.update_loss(loss)
+            stats.update_loss(loss.item())
+
+            if False: #segmentation_loss.item() > -1: # > 1.2:
+                from vi3o import view, flipp
+                view(255*image[0].detach().cpu().numpy().transpose([1,2,0]))
+                print(loss)
+                view(255*endpoint_pred[0,0].detach().cpu().numpy())
+                view(255*mask_pred_sigmoid[0].detach().cpu().numpy())
+                view(255*mask_true[0].detach().cpu().numpy())
+                flipp(pause=True)
 
         if experiment is not None:
             import wandb
@@ -63,7 +71,7 @@ def evaluate(net, dataloader, device, amp, experiment=None):
                 'masks': {
                     'loss': segmentation_loss,
                     'true': wandb.Image(mask_true[0].float().cpu()),
-                    'pred': wandb.Image(mask_pred.argmax(dim=1)[0].float().cpu() if net.n_classes > 1 else torch.sigmoid(mask_pred[0].float().cpu())),
+                    'pred': wandb.Image(mask_pred.argmax(dim=1)[0].float().cpu() if net.n_classes > 1 else mask_pred_sigmoid[0].float().cpu()),
                 },
                 'loss': loss,
             }))
