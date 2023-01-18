@@ -21,6 +21,7 @@ def evaluate(net, dataloader, device, amp, experiment=None):
             # move images and labels to correct device and type
             image = image.to(device=device, dtype=torch.float32, memory_format=torch.channels_last)
             mask_true = mask_true.to(device=device, dtype=torch.long)
+            endpoint_true = endpoint_true.to(device=device)
 
             # predict the mask
             mask_pred, endpoint_pred = net(image)
@@ -47,18 +48,24 @@ def evaluate(net, dataloader, device, amp, experiment=None):
                 result = map2points(endpoint_pred[i], 0.5, max_objs=50)
                 stats.update(result, expected)
 
+            segmentation_loss, endpoint_loss, loss = net.loss((mask_pred, endpoint_pred), (mask_true, endpoint_true))
+            stats.update_loss(loss)
+
         if experiment is not None:
             import wandb
             experiment.log(dict(eval={
                 'images': wandb.Image(image[0].cpu()),
                 'endpoints': {
+                    'loss': endpoint_loss,
                     'true': wandb.Image(endpoint_true[0].float().cpu()),
                     'pred': wandb.Image(endpoint_pred[0].float().cpu()),
                 },
                 'masks': {
+                    'loss': segmentation_loss,
                     'true': wandb.Image(mask_true[0].float().cpu()),
                     'pred': wandb.Image(mask_pred.argmax(dim=1)[0].float().cpu() if net.n_classes > 1 else torch.sigmoid(mask_pred[0].float().cpu())),
-                }
+                },
+                'loss': loss,
             }))
 
     net.train()

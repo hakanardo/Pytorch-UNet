@@ -1,6 +1,12 @@
 """ Full assembly of the parts to form the complete network """
 
 from .unet_parts import *
+from utils.dice_score import dice_loss
+
+def mse_loss_pos_weight(pred, gt):
+    weights = (gt > 1e-3).float() * 100 + 1
+    loss = (pred - gt) ** 2 * weights
+    return loss.mean()
 
 
 class UNet(nn.Module):
@@ -100,11 +106,16 @@ class UNet4k(nn.Module):
         self.up5 = (UpAlt(128, 64))
         self.up6 = (UpAlt(64, 32))
         self.up7 = (UpAlt(32, 16))
-        self.outc1 = (OutConv(16, n_classes))
+        if n_classes > 0:
+            self.outc1 = (OutConv(16, n_classes))
+        else:
+            self.outc1 = lambda x: torch.zeros(0, device=x.device)
         if n_point_types > 0:
             self.outc2 = (OutConv(16, n_point_types))
         else:
-            self.outc2 = lambda x: None
+            self.outc2 = lambda x: torch.zeros(0, device=x.device)
+        self.criterion = nn.CrossEntropyLoss() if n_classes > 1 else nn.BCEWithLogitsLoss()
+
 
     def forward(self, x):
         x1 = self.inc(x)
@@ -124,3 +135,24 @@ class UNet4k(nn.Module):
         x = self.up7(x, x1)
         logits = (self.outc1(x), self.outc2(x))
         return logits
+
+    def loss(self, predicted, expected):
+        masks_pred, endpoints_pred = predicted
+        true_masks, true_endpoints = expected
+        if self.n_classes == 1:
+            segmentation_loss = self.criterion(masks_pred.squeeze(1), true_masks.float())
+            segmentation_loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
+        else:
+            segmentation_loss = self.criterion(masks_pred, true_masks)
+            segmentation_loss += dice_loss(
+                F.softmax(masks_pred, dim=1).float(),
+                F.one_hot(true_masks, self.n_classes).permute(0, 3, 1, 2).float(),
+                multiclass=True
+            )
+
+        endpoints_pred = torch.sigmoid_(endpoints_pred)
+        endpoint_loss = mse_loss_pos_weight(endpoints_pred, true_endpoints) * 10
+
+        loss = segmentation_loss / 10 + endpoint_loss * 10
+        return segmentation_loss, endpoint_loss, loss
+

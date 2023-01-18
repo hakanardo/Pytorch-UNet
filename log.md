@@ -24,3 +24,5 @@
         Points: Detected 14791/20802 with 14696 extra. Precition: 50.2% Recall: 71.1% F1: 58.8% SamplesPerS: 6.103277343595142
         Segmentation F1: 0.9321556091308594
     Train Epoch 50:
+        Points: Detected 16288/20802 with 9663 extra. Precition: 62.8% Recall: 78.3% F1: 69.7% SamplesPerS: 6.082180121018759
+        Segmentation F1: 0.9316403269767761
