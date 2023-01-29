@@ -90,6 +90,7 @@ class UNet4k(nn.Module):
         super().__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
+        self.n_point_types = n_point_types
 
         self.inc = (DoubleConv(n_channels, 16))
         self.down1 = (Down(16, 32))
@@ -139,7 +140,9 @@ class UNet4k(nn.Module):
     def loss(self, predicted, expected):
         masks_pred, endpoints_pred = predicted
         true_masks, true_endpoints = expected
-        if self.n_classes == 1:
+        if self.n_classes == 0:
+            segmentation_loss = 0
+        elif self.n_classes == 1:
             segmentation_loss = self.criterion(masks_pred.squeeze(1), true_masks.float())
             segmentation_loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
         else:
@@ -150,7 +153,10 @@ class UNet4k(nn.Module):
                 multiclass=True
             )
 
-        endpoint_loss = mse_loss_pos_weight(endpoints_pred, true_endpoints) * 10
+        if self.n_point_types == 0:
+            self.n_point_types = 0
+        else:
+            endpoint_loss = mse_loss_pos_weight(endpoints_pred, true_endpoints) * 10
 
         loss = segmentation_loss / 10 + endpoint_loss * 10
         return segmentation_loss, endpoint_loss, loss
