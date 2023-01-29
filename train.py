@@ -156,7 +156,7 @@ def train_model(
                         scheduler.step(stats.loss)
 
                         logging.info('Validation Dice score: {}'.format(stats.dice_score))
-                        experiment.log({
+                        log_data = {
                             'learning rate': optimizer.param_groups[0]['lr'],
                             'validation Dice': stats.dice_score,
                             'eval': {
@@ -165,18 +165,21 @@ def train_model(
                                 'recall': stats.recall,
                             },
                             'images': wandb.Image(images[0].cpu()),
-                            'endpoints': {
-                                'true': wandb.Image(true_endpoints[0].float().cpu()),
-                                'pred': wandb.Image(endpoints_pred[0].float().cpu()),
-                            },
-                            'masks': {
-                                'true': wandb.Image(true_masks[0].float().cpu()),
-                                'pred': wandb.Image(masks_pred.argmax(dim=1)[0].float().cpu() if model.n_classes > 1 else torch.sigmoid(masks_pred[0].float().cpu())),
-                            },
                             'step': global_step,
                             'epoch': epoch,
                             **histograms
-                        })
+                        }
+                        if model.n_classes > 0:
+                            log_data['masks'] = {
+                                'true': wandb.Image(true_masks[0].float().cpu()),
+                                'pred': wandb.Image(masks_pred.argmax(dim=1)[0].float().cpu() if model.n_classes > 1 else torch.sigmoid(masks_pred[0].float().cpu())),
+                            }
+                        if model.n_point_types > 0:
+                            log_data['endpoints'] = {
+                                'true': wandb.Image(true_endpoints[0].float().cpu()),
+                                'pred': wandb.Image(endpoints_pred[0].float().cpu()),
+                            }
+                        experiment.log(log_data)
 
         if save_checkpoint:
             Path(dir_checkpoint).mkdir(parents=True, exist_ok=True)
