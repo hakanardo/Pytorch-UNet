@@ -203,13 +203,15 @@ if __name__ == '__main__':
     model = model.to(memory_format=torch.channels_last)
 
     # state_dict = torch.load("checkpoints3/checkpoint_epoch26.pth", map_location=device)
-    state_dict = torch.load("checkpoints3/checkpoint_epoch50.pth", map_location=device)
+    # state_dict = torch.load("checkpoints3/checkpoint_epoch50.pth", map_location=device)
+    # state_dict = torch.load("checkpoints4/checkpoint_epoch200.pth", map_location=device)
+    state_dict = torch.load("checkpoints4/checkpoint_epoch500.pth", map_location=device)
     mask_values = state_dict.pop('mask_values', [0, 1])
     model.load_state_dict(state_dict)
 
     loader_args = dict(batch_size=1, num_workers=os.cpu_count(), pin_memory=True)
-    # val_set = HFlipDataset(HalfDataset('pdata/eval'))
-    val_set = HFlipDataset(HalfDataset('pdata/train'))
+    val_set = HFlipDataset(HalfDataset('pdata/eval'))
+    # val_set = HFlipDataset(HalfDataset('pdata/train'))
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
     stats = evaluate(model, val_loader, device, True)
     print('Points:', stats)
