@@ -141,7 +141,7 @@ class UNet4k(nn.Module):
         masks_pred, endpoints_pred = predicted
         true_masks, true_endpoints = expected
         if self.n_classes == 0:
-            segmentation_loss = 0
+            segmentation_loss = torch.tensor(0.0)
         elif self.n_classes == 1:
             segmentation_loss = self.criterion(masks_pred.squeeze(1), true_masks.float())
             segmentation_loss += dice_loss(F.sigmoid(masks_pred.squeeze(1)), true_masks.float(), multiclass=False)
@@ -154,7 +154,7 @@ class UNet4k(nn.Module):
             )
 
         if self.n_point_types == 0:
-            endpoint_loss = 0
+            endpoint_loss = torch.tensor(0.0)
         else:
             endpoint_loss = mse_loss_pos_weight(endpoints_pred, true_endpoints) * 10
 
