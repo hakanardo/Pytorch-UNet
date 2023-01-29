@@ -26,7 +26,9 @@ def evaluate(net, dataloader, device, amp, experiment=None):
             # predict the mask
             mask_pred, endpoint_pred = net(image)
 
-            if net.n_classes == 1:
+            if net.n_classes == 0:
+                pass
+            elif net.n_classes == 1:
                 assert mask_true.min() >= 0 and mask_true.max() <= 1, 'True mask indices should be in [0, 1]'
                 mask_pred_sigmoid = (F.sigmoid(mask_pred.squeeze(1)) > 0.5).float()
                 # compute the Dice score
@@ -42,10 +44,11 @@ def evaluate(net, dataloader, device, amp, experiment=None):
             # view(255*(endpoint_pred[0,0].detach().cpu().numpy() > 0.3))
             # view(255*(endpoint_true[0,0].detach().cpu().numpy() > 0.3))
 
-            for i in range(len(endpoint_true)):
-                expected = map2points(endpoint_true[i], 0.5, max_objs=50)
-                result = map2points(endpoint_pred[i], 0.5, max_objs=50)
-                stats.update(result, expected)
+            if net.n_point_types > 0:
+                for i in range(len(endpoint_true)):
+                    expected = map2points(endpoint_true[i], 0.5, max_objs=50)
+                    result = map2points(endpoint_pred[i], 0.5, max_objs=50)
+                    stats.update(result, expected)
 
             segmentation_loss, endpoint_loss, loss = net.loss((mask_pred, endpoint_pred), (mask_true, endpoint_true))
             stats.update_loss(loss.item())
@@ -61,20 +64,23 @@ def evaluate(net, dataloader, device, amp, experiment=None):
 
         if experiment is not None:
             import wandb
-            experiment.log(dict(eval={
+            log_data = {
                 'images': wandb.Image(image[0].cpu()),
-                'endpoints': {
+                'loss': loss,
+            }
+            if net.n_point_types > 0:
+                log_data['endpoints'] = {
                     'loss': endpoint_loss,
                     'true': wandb.Image(endpoint_true[0].float().cpu()),
                     'pred': wandb.Image(endpoint_pred[0].float().cpu()),
-                },
-                'masks': {
+                }
+            if net.n_classes > 0:
+                log_data['masks'] = {
                     'loss': segmentation_loss,
                     'true': wandb.Image(mask_true[0].float().cpu()),
                     'pred': wandb.Image(mask_pred.argmax(dim=1)[0].float().cpu() if net.n_classes > 1 else mask_pred_sigmoid[0].float().cpu()),
-                },
-                'loss': loss,
-            }))
+                }
+            experiment.log(dict(eval=log_data))
 
     net.train()
     stats.dice_score = (dice_score / max(num_val_batches, 1)).item()
