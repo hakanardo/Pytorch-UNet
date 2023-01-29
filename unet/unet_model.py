@@ -154,7 +154,7 @@ class UNet4k(nn.Module):
             )
 
         if self.n_point_types == 0:
-            self.n_point_types = 0
+            endpoint_loss = 0
         else:
             endpoint_loss = mse_loss_pos_weight(endpoints_pred, true_endpoints) * 10
 
