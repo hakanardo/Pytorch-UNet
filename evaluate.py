@@ -215,7 +215,7 @@ if __name__ == '__main__':
     mask_values = state_dict.pop('mask_values', [0, 1])
     model.load_state_dict(state_dict)
 
-    loader_args = dict(batch_size=1, num_workers=os.cpu_count(), pin_memory=True)
+    loader_args = dict(batch_size=1, num_workers=0, pin_memory=True)
     val_set = HFlipDataset(HalfDataset('pdata/eval'))
     # val_set = HFlipDataset(HalfDataset('pdata/train'))
     val_loader = DataLoader(val_set, shuffle=False, drop_last=True, **loader_args)
